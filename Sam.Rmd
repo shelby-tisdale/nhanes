@@ -1,1 +1,29 @@
-hi
+Load data
+```{r}
+data <- readRDS("/Users/scoot/Downloads/REU Summer 2024/Hackathon III/data/nhanes_fda_with_r.rds")
+
+data <- data[,1:11]
+
+# Explore the structure
+str(data)
+
+# select vector columns
+data_use <- data[,1:11]
+summary(data_use)
+
+dataSMIMS[1:5, 1:10]
+```
+
+```{r}
+library(tidyverse)
+library(gt)
+library(gtExtras)
+library(gtsummary)
+
+data <- data |> drop_na()
+data <- data |> mutate(high_physical_activity = ifelse(TMIMS > 16000, "yes", "no"))
+data |> select(-c(SEQN, CHD, education)) |> tbl_summary(by=high_physical_activity)
+  
+```
+
+
