@@ -3,3 +3,333 @@ title: "Hackathon III"
 author: "Shelby Tisdale, Sam Darby"
 format: html
 ---
+
+# Research Question(s)
+
+Is there a causal relationship between high physical activity intensity for the day and mortality?
+
+# Data Preparation
+
+-   **Eligibility:** All NHANES participants with mortality data
+-   **Exposure definition:** Individual had high average physical activity (TMIMS)
+-   **Assignment procedures:**
+    -   Observed: an individual had high avereage physical activity (TMIMS \> 16,000), the individual is classified as "exposed", otherwise "unexposed"
+-   **Outcome definition:** mortality outcome
+-   **Causal contrast of interest:** Average treatment effect
+-   **Analyis plan:** ??
+
+## Load Data and Packages
+
+```{r}
+#| label: load-data-and-packages
+library(tidyverse)
+library(gt)
+library(tidymodels)
+library(knitr)
+library(halfmoon)
+library(janitor)
+library(ggdag)
+library(dagitty)
+library(MatchIt)
+library(WeightIt)
+library(propensity)
+library(survey)
+
+# load data
+nhanes <- readRDS("nhanes_fda_with_r.rds")
+nhanes <- nhanes[,1:11]
+```
+
+```{r}
+#| label: remove-nas
+set.seed(123)
+
+# clean data
+nhanes_clean <- nhanes |>
+  select(-c(SEQN, time, CHD, education)) |>
+  drop_na() |>
+  mutate(high_activity = factor(if_else(TMIMS >= 16000, 1, 0)))
+```
+
+# Determine Confounders
+
+```{r}
+#| label: determine-confounders
+
+dagify(mortality ~ race + age + BMI + PIR + gender,
+       high_activity ~ race + age + PIR + BMI + gender,
+       exposure = "high_activity",
+       outcome = "mortality")
+
+nhanes_dag <- dagify(
+  mortality ~ race + age + BMI + PIR + gender,
+  high_activity ~ age + PIR + BMI + gender,
+  exposure = "high_activity",
+  outcome = "mortality",
+  labels = c(
+    race = "race",
+    age = "age",
+    BMI = "BMI",
+    PIR = "PIR",
+    gender = "gender",
+    high_activity = "high activity",
+    mortality = "mortality"
+  )
+)
+
+ggdag(nhanes_dag, use_labels = "label", text = FALSE) +
+  theme_dag()
+
+ggdag_adjustment_set(nhanes_dag,
+                     text = FALSE,
+                     use_labels = "label") +
+  theme_dag()
+```
+
+## Visualize Data and Assumptions
+
+### Positivity assumption
+
+Confounding variables: age, gender, race, BMI, PIR
+
+#### Outcome Variable
+
+```{r}
+#| label: visualize-confounders-1
+
+nhanes_clean |> 
+  mutate(mortality = if_else(event == 1, "Yes", "No")) |>
+  mutate(high_activity = if_else(high_activity == 1, "Yes", "No")) |>
+ggplot(aes(x = mortality, group = high_activity, fill = high_activity)) +
+  geom_bar(position = position_dodge2(width = 0.9, preserve = "single")) +
+  theme_minimal() +
+  labs(title = "Mortality status by activity level",
+       x = "Mortality",
+       fill = "High physical activity",
+       y = "Count") +
+  scale_fill_brewer(palette = "Dark2") +
+  theme(legend.position = "bottom")
+```
+
+#### Confounding Variables
+
+```{r}
+
+nhanes_clean |> 
+  mutate(mortality = if_else(event == 1, "Yes", "No")) |>
+  mutate(high_activity = if_else(high_activity == 1, "Yes", "No")) |>
+ggplot(
+  aes(
+    x = age,
+    group = high_activity,
+    fill = high_activity
+  )
+) +
+  geom_mirror_histogram(bins = 20) +
+  labs(
+    fill = "High physical activity",
+    x = "Age",
+    title = "Activity level by age",
+    y = "Count"
+  ) +
+  theme_minimal() +
+  scale_fill_brewer(palette = "Dark2") +
+  theme(legend.position = "bottom")
+```
+
+```{r}
+
+nhanes_clean |> 
+  mutate(high_activity = if_else(high_activity == 1, "Yes", "No")) |>
+ggplot(aes(x = gender, group = high_activity, fill = high_activity)) +
+  geom_bar(position = position_dodge2(width = 0.9, preserve = "single")) +
+  theme_minimal() +
+  labs(title = "Activity level by gender",
+       x = "Gender",
+       fill = "High physical activity",
+       y = "Count") +
+  scale_fill_brewer(palette = "Dark2") +
+  theme(legend.position = "bottom")
+```
+
+```{r}
+nhanes_clean |>
+  mutate(high_activity = if_else(high_activity == 1, "Yes", "No")) |>
+ggplot(
+  aes(
+    x = PIR,
+    group = high_activity,
+    fill = high_activity
+  )
+) +
+  geom_mirror_histogram(bins = 20) +
+  labs(
+    fill = "High physical activity",
+    x = "PIR",
+    title = "Activity level by poverty-income ratio",
+    y = "Count"
+  ) +
+  theme_minimal() +
+  scale_fill_brewer(palette = "Dark2") +
+  theme(legend.position = "bottom")
+```
+
+```{r}
+nhanes_clean |> 
+  mutate(high_activity = if_else(high_activity == 1, "Yes", "No")) |>
+ggplot(aes(x = race, group = high_activity, fill = high_activity)) +
+  geom_bar(position = position_dodge2(width = 0.9, preserve = "single")) +
+  theme_minimal() +
+  labs(title = "Activity level by race",
+       x = "Race",
+       fill = "High physical activity",
+       y = "Count") +
+  scale_fill_brewer(palette = "Dark2") +
+  theme(legend.position = "bottom")
+```
+
+```{r}
+nhanes_clean |>
+  mutate(high_activity = if_else(high_activity == 1, "Yes", "No")) |>
+ggplot(
+  aes(
+    x = BMI,
+    group = high_activity,
+    fill = high_activity
+  )
+) +
+  geom_mirror_histogram(bins = 20) +
+  labs(
+    fill = "High physical activity",
+    x = "BMI",
+    title = "Activity level by BMI",
+    y = "Count"
+  ) +
+  theme_minimal() +
+  scale_fill_brewer(palette = "Dark2") +
+  theme(legend.position = "bottom")
+```
+
+# Propensity Score Model
+
+```{r}
+#| label: calculate-propensity-scores
+
+nhanes_propensity <- glm(
+  high_activity ~ age + gender + race + BMI + PIR,
+  data = nhanes_clean,
+  family = binomial()
+) |>
+  augment(type.predict = "response", data = nhanes_clean)
+```
+
+```{r}
+#| label: plot-propensity-scores
+
+nhanes_propensity |>
+  ggplot(aes(.fitted, fill = factor(high_activity))) +
+  geom_mirror_histogram(bins = 50) +
+  scale_y_continuous(labels = abs) +
+  scale_fill_brewer(palette = "Dark2") + 
+  labs(
+    x = "propensity score",
+    fill = "High physical activity"
+  ) +
+  theme_minimal() +
+  theme(legend.position = "bottom")
+
+```
+
+```{r}
+#| label: propensity-score-matching
+
+m <- matchit(
+  high_activity ~ age + gender + race + BMI + PIR,
+  data = nhanes_clean
+)
+
+nhanes_matched <- get_matches(m)
+```
+
+```{r}
+#| label: propensity-model-evaluation
+
+# get weights
+nhanes_wt <- nhanes_propensity |>
+  mutate(w_ate = get_w_from_ps(.fitted, high_activity))
+
+# calculate standardized mean difference
+nhanes_smds <- tidy_smd(
+  nhanes_wt,
+  .vars = c(age, race, gender, BMI, PIR),
+  .group = high_activity,
+  .wts = w_ate
+)
+
+nhanes_smds
+
+# visualize balance with love plot
+
+nhanes_smds |>
+  ggplot(aes(x = abs(smd), y = variable, group = method, color = method)) +
+  geom_love() +
+  scale_color_brewer(palette = "Dark2") + 
+  theme_minimal()
+```
+
+# Causal Estimands
+
+**Estimand:** Expected value of the difference in outcome (mortality) across all individuals
+
+-   average treatment effect, $E[Y(1)-Y(0)]$
+
+**Estimator:**
+
+```{r}
+#| label: plot-weights
+
+ggplot(nhanes_wt, aes(x = w_ate)) +
+  geom_histogram(bins = 50) +
+  theme_minimal()
+
+```
+
+```{r}
+#| label: visualize weights
+
+ggplot(nhanes_wt, aes(.fitted, group = high_activity)) +
+  geom_mirror_histogram(bins = 50) +
+  geom_mirror_histogram(
+    aes(fill = high_activity, weight = w_ate),
+    bins = 50,
+    alpha = 0.5
+  ) +
+  scale_y_continuous(labels = abs) +
+  scale_fill_brewer(palette = "Dark2") +
+  labs(
+    x = "propensity score",
+    fill = "High activity"
+  ) +
+  theme_minimal()
+```
+
+```{r}
+#| label: fitting-outcome-model
+
+# fitting weighted model with survey package
+nhanes_des <- svydesign(
+  ids = ~1,
+  weights = ~w_ate,
+  data = nhanes_wt
+)
+
+nhanes_glms <- svyglm(
+  event ~ high_activity,
+  nhanes_des,
+  family = binomial(link = "logit")) |>
+  tidy(conf.int = TRUE)
+
+
+# prediction
+
+```
