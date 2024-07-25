@@ -32,7 +32,6 @@ library(ggdag)
 library(dagitty)
 library(MatchIt)
 library(WeightIt)
-library(propensity)
 library(survey)
 
 # load data
@@ -271,10 +270,19 @@ nhanes_smds
 # visualize balance with love plot
 
 nhanes_smds |>
-  ggplot(aes(x = abs(smd), y = variable, group = method, color = method)) +
+  mutate(
+    method = ifelse(method == "observed", "Observed", "Weighted")
+  ) |>
+  ggplot(aes(x = abs(smd), y = variable, group = method, color = method)) + 
   geom_love() +
-  scale_color_brewer(palette = "Dark2") + 
-  theme_minimal()
+  labs(
+    x = "Absolute Value of the SMD",
+    y = "Variable",
+    color = "Method",
+    title = "SMD for Observed and Weighted Confounders"
+  ) +
+  theme_minimal() +
+  scale_color_manual(values=c("#A9BECB", "#7994A0"))
 ```
 
 # Causal Estimands
@@ -297,20 +305,25 @@ ggplot(nhanes_wt, aes(x = w_ate)) +
 ```{r}
 #| label: visualize weights
 
-ggplot(nhanes_wt, aes(.fitted, group = high_activity)) +
+nhanes_wt |>
+  mutate(high_activity = ifelse(high_activity == 1, "High", "Low/Moderate")) |>
+ggplot(aes(.fitted, group = high_activity)) +
   geom_mirror_histogram(bins = 50) +
   geom_mirror_histogram(
     aes(fill = high_activity, weight = w_ate),
     bins = 50,
-    alpha = 0.5
+    alpha = 0.5,
   ) +
   scale_y_continuous(labels = abs) +
-  scale_fill_brewer(palette = "Dark2") +
+  scale_fill_manual(values=c("#A9BECB", "#7994A0")) +
   labs(
-    x = "propensity score",
-    fill = "High activity"
+    title = "Propensity Score by Activity Level",
+    x = "Propensity Score",
+    y = "Count",
+    fill = "Activity"
   ) +
-  theme_minimal()
+  theme_minimal() +
+  theme(legend.position = "bottom")
 ```
 
 ```{r}

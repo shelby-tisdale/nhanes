@@ -1,6 +1,7 @@
 Load data
 ```{r}
 data <- readRDS("/Users/scoot/Downloads/REU Summer 2024/Hackathon III/data/nhanes_fda_with_r.rds")
+nhanes <- data
 data <- data[,1:11]
 
 ```
@@ -18,7 +19,7 @@ library(broom)
 Clean data
 ```{r}
 data.clean <- data |> 
-  mutate(high_physical_activity = ifelse(TMIMS > 16000, "Yes", "No")) |> 
+  mutate(high_physical_activity = ifelse(TMIMS > 16000, 1, 0)) |> 
   select(-c(CHD, education)) |>
   drop_na()
 ```
@@ -37,12 +38,38 @@ data.clean |> mutate(
                        "Mexican American",
                        "Non-Hispanic Asian",
                        "Other Hispanic",
-                       "Other Race"))
+                       "Other Race")),
+  high_physical_activity = ifelse(high_physical_activity == 1, 
+                                  "High Physical Activity",
+                                  "Low/Moderate Physical Activity")
 ) |>
-  select(Death, `Time to Mortality Event`, Age, Gender, Race, high_physical_activity) |>
+  select(Death, `Time to Mortality Event`, Age, Gender, Race, PIR, BMI, high_physical_activity) |>
   tbl_summary(by=high_physical_activity)
   
 ```
+
+Table 1 again using nhanes_matched from Shelby's work
+```{r}
+nhanes_matched |> mutate(
+  `Death` = event,
+  Age = age,
+  Gender = gender,
+  Race = fct_relevel(race, 
+                     c("Non-Hispanic White", 
+                       "Non-Hispanic Black", 
+                       "Mexican American",
+                       "Non-Hispanic Asian",
+                       "Other Hispanic",
+                       "Other Race")),
+  high_activity = ifelse(high_activity == 1, 
+                                  "High Physical Activity",
+                                  "Low/Moderate Physical Activity")
+) |>
+  select(Death, Age, Gender, Race, PIR, BMI, high_activity) |>
+  tbl_summary(by=high_activity)
+```
+
+
 
 Graphs, graphs, graphs!!!
 ```{r}
