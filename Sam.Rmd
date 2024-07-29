@@ -1,29 +1,179 @@
 Load data
 ```{r}
 data <- readRDS("/Users/scoot/Downloads/REU Summer 2024/Hackathon III/data/nhanes_fda_with_r.rds")
-
+nhanes <- data
 data <- data[,1:11]
 
-# Explore the structure
-str(data)
-
-# select vector columns
-data_use <- data[,1:11]
-summary(data_use)
-
-dataSMIMS[1:5, 1:10]
 ```
 
+Load libraries
 ```{r}
 library(tidyverse)
 library(gt)
 library(gtExtras)
 library(gtsummary)
+library(ggplot2)
+library(broom)
+```
 
-data <- data |> drop_na()
-data <- data |> mutate(high_physical_activity = ifelse(TMIMS > 16000, "yes", "no"))
-data |> select(-c(SEQN, CHD, education)) |> tbl_summary(by=high_physical_activity)
+Clean data
+```{r}
+data.clean <- data |> 
+  mutate(high_physical_activity = ifelse(TMIMS > 16000, 1, 0)) |> 
+  select(-c(CHD, education)) |>
+  drop_na()
+```
+
+
+Table 1
+```{r}
+data.clean |> mutate(
+  `Death` = event,
+  `Time to Mortality Event` = time,
+  Age = age,
+  Gender = gender,
+  Race = fct_relevel(race, 
+                     c("Non-Hispanic White", 
+                       "Non-Hispanic Black", 
+                       "Mexican American",
+                       "Non-Hispanic Asian",
+                       "Other Hispanic",
+                       "Other Race")),
+  high_physical_activity = ifelse(high_physical_activity == 1, 
+                                  "High Physical Activity",
+                                  "Low/Moderate Physical Activity")
+) |>
+  select(Death, `Time to Mortality Event`, Age, Gender, Race, PIR, BMI, high_physical_activity) |>
+  tbl_summary(by=high_physical_activity)
   
 ```
+
+Table 1 again using nhanes_matched from Shelby's work
+```{r}
+nhanes_matched |> mutate(
+  `Death` = event,
+  Age = age,
+  Gender = gender,
+  Race = fct_relevel(race, 
+                     c("Non-Hispanic White", 
+                       "Non-Hispanic Black", 
+                       "Mexican American",
+                       "Non-Hispanic Asian",
+                       "Other Hispanic",
+                       "Other Race")),
+  high_activity = ifelse(high_activity == 1, 
+                                  "High Physical Activity",
+                                  "Low/Moderate Physical Activity")
+) |>
+  select(Death, Age, Gender, Race, PIR, BMI, high_activity) |>
+  tbl_summary(by=high_activity)
+```
+
+
+
+Graphs, graphs, graphs!!!
+```{r}
+data.clean |>
+  ggplot(aes(y = race, fill = high_physical_activity)) +
+           geom_histogram(stat="count", position = "dodge") +
+           labs(y = "Race", fill = "High Physical Activity")
+
+data.clean |>
+  ggplot(aes(x = gender, fill = high_physical_activity)) +
+           geom_histogram(stat="count", position = "dodge") +
+           labs(x = "Gender", fill = "High Physical Activity")
+
+library(halfmoon)
+
+data.clean |>
+  ggplot(aes(BMI, fill = high_physical_activity)) +
+  geom_mirror_histogram(bins = 20) + 
+  scale_y_continuous(labels = abs) +
+  labs(x = "BMI", fill = "High Physical Activity")
+
+data.clean |>
+  ggplot(aes(age, fill = high_physical_activity)) +
+  geom_mirror_histogram(bins = 50) + 
+  scale_y_continuous(labels = abs) +
+  labs(x = "Age", fill = "High Physical Activity")
+
+data.clean |>
+  ggplot(aes(PIR, fill = high_physical_activity)) +
+  geom_mirror_histogram(bins = 20) + 
+  scale_y_continuous(labels = abs) +
+  labs(x = "PIR", fill = "High Physical Activity")
+```
+
+Linear models to evaluate causal assumptions
+```{r}
+summary(lm(
+  TMIMS ~ race + gender + age + BMI, # PIR removed
+  data = data.clean
+))
+
+summary(glm(
+  event ~ race + gender + age + PIR, # BMI removed
+  data = data.clean, family = binomial(link = "logit")
+))
+```
+
+
+Calculating denominators for continuous exposure
+```{r}
+denom_model <- lm(TMIMS ~ race + gender + age + BMI, data = data.clean) 
+
+denominators <- denom_model |>
+  augment(data = data.clean) |>
+  mutate(denominator = dnorm(TMIMS, .fitted, 
+                             mean(.sigma, na.rm = TRUE))) |>
+  select(denominator, .fitted)
+
+denominators |>
+  mutate(wts = 1/denominator) |>
+  ggplot(aes(wts)) +
+  geom_histogram(bins = 50) +
+  scale_x_log10(name = "weights")
+```
+
+Calculate numerators for continuous exposure
+```{r}
+numerator_model <- lm(TMIMS ~ 1, data = data.clean) 
+
+numerators <- numerator_model |>
+  augment(data = data.clean) |>
+  transmute(numerator = dnorm(TMIMS, .fitted, 
+                              mean(.sigma, na.rm = TRUE)))
+```
+
+Calculate propensity scores for continuous exposure
+```{r}
+data.clean.wts <- data.clean |>
+  bind_cols(numerators) |>
+  bind_cols(denominators) |>
+  mutate(swts = numerator / denominator)
+
+ggplot(data.clean.wts, aes(swts)) +
+  geom_histogram(bins = 50) +
+  scale_x_log10(name = "weights")
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
