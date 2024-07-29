@@ -32,7 +32,6 @@ library(ggdag)
 library(dagitty)
 library(MatchIt)
 library(WeightIt)
-library(propensity)
 library(survey)
 
 # load data
@@ -316,6 +315,7 @@ ggplot(nhanes_wt, aes(.fitted, group = high_activity)) +
 ```{r}
 #| label: fitting-outcome-model
 
+library(survey)
 # fitting weighted model with survey package
 nhanes_des <- svydesign(
   ids = ~1,
@@ -326,10 +326,93 @@ nhanes_des <- svydesign(
 nhanes_glms <- svyglm(
   event ~ high_activity,
   nhanes_des,
-  family = binomial(link = "logit")) |>
-  tidy(conf.int = TRUE)
+  family = binomial(link = "logit"))
 
+nhanes_glms |>
+  tidy()
 
+nhanes_fit <- glm(
+  event ~ high_activity,
+  family = binomial(link = "logit"),
+  data = nhanes_wt,
+  weights = w_ate)
+
+# this has incorrect error!
+nhanes_fit |>
+  tidy()
 # prediction
+
+# predict probabilities
+nhanes_aug <- augment(nhanes_glms) |>
+  select(.fitted, .resid) |>
+  mutate(odds = exp(.fitted), probability = odds/(1 + odds))
+
+nhanes_pred <- nhanes_clean
+nhanes_pred$odds <- nhanes_aug$odds
+nhanes_pred$prob <- nhanes_aug$probability
+predict(nhanes_fit, new_data = nhanes_clean)
+
+plogis(coef(nhanes_glms)[1] + coef(nhanes_glms)[2]) - plogis(coef(nhanes_glms)[1])
+
+nhanes_matched %>% 
+  group_by(high_activity) %>% 
+  summarise(p = mean(event == 1)) %>% 
+  pivot_wider(names_from = high_activity, values_from = p) %>% 
+  mutate(sate = `1` - `0`)
+
+nd <- nhanes_matched %>% 
+  select(id) |>
+  expand_grid(high_activity = 0:1)
+
+predict(nhanes_glms,
+        newdata = nd,
+        se.fit = TRUE,
+        type = "response") |>
+  data.frame() |>
+  bind_cols(nd) |>
+  pivot_wider(names_from = high_activity, values_from = fit) |>
+  summarize(ate = mean(`1`-`0`, na.rm))
+
+avg_comparisons(nhanes_glms, variables = "high_activity")
+
+
+# ancova model
+nhanes_glms2 <- svyglm(
+  event ~ high_activity + gender + race + PIR + age,
+  nhanes_des,
+  family = binomial(link = "logit"))
+
+bind_rows(tidy(nhanes_glms), tidy(nhanes_glms2)) %>% 
+  filter(term == "high_activity1") %>% 
+  mutate(fit = c("nhanes_glms", "nhanes_glms2"),
+         model_type = c("ANOVA", "ANCOVA")) %>%
+  rename(`beta[1]` = estimate) %>% 
+  select(fit, model_type, `beta[1]`, std.error)
+
+get_mode <- function(x) {
+  ux <- unique(x)
+  ux[which.max(tabulate(match(x, ux)))]
+}
+
+
+nd <- nhanes_matched %>% 
+  summarise(age = mean(age),  # recall agez is a z-score, with a mean of 0 by definition
+            gender    = get_mode(gender),
+            race       = get_mode(race),
+            PIR = mean(PIR)) %>% 
+  expand_grid(high_activity = factor(0:1))
+
+
+predict(nhanes_glms2, 
+        newdata = nd,
+        se.fit = TRUE,
+        type = "response") %>% 
+  data.frame() %>% 
+  bind_cols(nd)
+
+predictions(nhanes_glms2, newdata = nd,
+            by = "high_activity")
+
+predictions(nhanes_glms2, newdata = nd, by = "high_activity", hypothesis = "revpairwise")
 
 ```
