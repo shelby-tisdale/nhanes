@@ -1,4 +1,5 @@
 Load data
+
 ```{r}
 data <- readRDS("/Users/scoot/Downloads/REU Summer 2024/Hackathon III/data/nhanes_fda_with_r.rds")
 nhanes <- data
@@ -7,6 +8,7 @@ data <- data[,1:11]
 ```
 
 Load libraries
+
 ```{r}
 library(tidyverse)
 library(gt)
@@ -17,6 +19,7 @@ library(broom)
 ```
 
 Clean data
+
 ```{r}
 data.clean <- data |> 
   mutate(high_physical_activity = ifelse(TMIMS > 16000, 1, 0)) |> 
@@ -24,8 +27,8 @@ data.clean <- data |>
   drop_na()
 ```
 
-
 Table 1
+
 ```{r}
 data.clean |> mutate(
   `Death` = event,
@@ -49,6 +52,7 @@ data.clean |> mutate(
 ```
 
 Table 1 again using nhanes_matched from Shelby's work
+
 ```{r}
 nhanes_matched |> mutate(
   `Death` = event,
@@ -69,9 +73,8 @@ nhanes_matched |> mutate(
   tbl_summary(by=high_activity)
 ```
 
-
-
 Graphs, graphs, graphs!!!
+
 ```{r}
 data.clean |>
   ggplot(aes(y = race, fill = high_physical_activity)) +
@@ -105,6 +108,7 @@ data.clean |>
 ```
 
 Linear models to evaluate causal assumptions
+
 ```{r}
 summary(lm(
   TMIMS ~ race + gender + age + BMI, # PIR removed
@@ -117,8 +121,8 @@ summary(glm(
 ))
 ```
 
-
 Calculating denominators for continuous exposure
+
 ```{r}
 denom_model <- lm(TMIMS ~ race + gender + age + BMI, data = data.clean) 
 
@@ -136,6 +140,7 @@ denominators |>
 ```
 
 Calculate numerators for continuous exposure
+
 ```{r}
 numerator_model <- lm(TMIMS ~ 1, data = data.clean) 
 
@@ -146,6 +151,7 @@ numerators <- numerator_model |>
 ```
 
 Calculate propensity scores for continuous exposure
+
 ```{r}
 data.clean.wts <- data.clean |>
   bind_cols(numerators) |>
@@ -157,23 +163,3 @@ ggplot(data.clean.wts, aes(swts)) +
   scale_x_log10(name = "weights")
 
 ```
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

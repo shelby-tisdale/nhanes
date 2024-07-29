@@ -16,7 +16,12 @@ Is there a causal relationship between high physical activity intensity for the 
     -   Observed: an individual had high avereage physical activity (TMIMS \> 16,000), the individual is classified as "exposed", otherwise "unexposed"
 -   **Outcome definition:** mortality outcome
 -   **Causal contrast of interest:** Average treatment effect
--   **Analyis plan:** ??
+-   **Analyis plan:**
+    -    Prepare data based on eligibility criteria.
+    -    Use DAG to determine potential confounders.
+    -    Fit a propensity score model to estimate average treatment effect (ATE) of exposure on outcome.
+    -   Create a matched dataset using propensity score model, adjusting for confounders.
+    -   Build logistic regression model using matched dataset to determine causal effect of exposure on outcomes
 
 ## Load Data and Packages
 
@@ -48,6 +53,30 @@ nhanes_clean <- nhanes |>
   select(-c(SEQN, time, CHD, education)) |>
   drop_na() |>
   mutate(high_activity = factor(if_else(TMIMS >= 16000, 1, 0)))
+```
+
+## Create Table 1
+
+```{r}
+nhanes_clean |> mutate(
+  `Death` = event,
+  `Time to Mortality Event` = time,
+  Age = age,
+  Gender = gender,
+  Race = fct_relevel(race, 
+                     c("Non-Hispanic White", 
+                       "Non-Hispanic Black", 
+                       "Mexican American",
+                       "Non-Hispanic Asian",
+                       "Other Hispanic",
+                       "Other Race")),
+  high_physical_activity = ifelse(high_physical_activity == 1, 
+                                  "High Physical Activity",
+                                  "Low/Moderate Physical Activity")
+) |>
+  select(Death, `Time to Mortality Event`, Age, Gender, Race, PIR, BMI, high_physical_activity) |>
+  tbl_summary(by=high_physical_activity)
+  
 ```
 
 # Determine Confounders
